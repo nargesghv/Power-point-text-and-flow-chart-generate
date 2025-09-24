@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>GraphDeck ✨</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta http-equiv="Pragma" content="no-cache"/>
+  <meta http-equiv="Expires" content="0"/>
+  <style>
+    body{margin:0;background:#070915;color:#e8ecff;font:16px/1.5 system-ui,Segoe UI,Inter}
+    .wrap{max-width:1200px;margin:32px auto;padding:0 20px}
+    .panel{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:16px}
+    .row{display:grid;gap:16px}
+    @media(min-width:960px){.row{grid-template-columns:2fr 1fr}}
+    .btn{padding:10px 14px;border-radius:12px;font-weight:600;border:1px solid rgba(255,255,255,.1);
+      background:linear-gradient(135deg,rgba(99,102,241,.25),rgba(236,72,153,.25));color:#e8ecff;cursor:pointer}
+    .badge{display:inline-flex;gap:8px;padding:4px 8px;border-radius:10px;background:rgba(255,255,255,.1);
+      border:1px solid rgba(255,255,255,.1);font-size:12px}
+    .input{width:100%;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#e8ecff}
+    pre{white-space:pre-wrap;margin:0}
+    .links a{color:#93c5fd;margin-right:10px;text-decoration:underline}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+      <h1 style="font-weight:900;font-size:34px;letter-spacing:-.02em">GraphDeck ✨</h1>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <button id="runAll" class="btn">✨ Run All</button>
+        <button id="runManual" class="btn">🪄 Step by Step</button>
+        <label class="badge"><input id="fast" type="checkbox" checked/> ⚡ Fast</label>
+      </div>
+    </header>
+
+    <div class="panel" style="margin-bottom:16px">
+      <label style="font-size:12px;opacity:.7">Topic</label>
+      <input id="topic" class="input" value="AI in marketing" placeholder="e.g., AI in marketing"/>
+    </div>
+
+    <div class="row">
+      <div class="panel">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <span class="badge">Slides (text)</span>
+          <span id="busy" class="badge" style="display:none">Working…</span>
+        </div>
+        <div id="slides" style="min-height:320px;opacity:.8">No content yet. Run the pipeline.</div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <span class="badge">Slide 3 Flowchart</span>
+        </div>
+        <div id="flowWrap" style="min-height:220px;opacity:.8">No diagram yet.</div>
+        <div id="links" class="links" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <div class="panel">
+        <h3 style="margin:0 0 6px 0">Activity</h3>
+        <div id="log" style="font-size:12px;max-height:240px;overflow:auto"></div>
+      </div>
+      <div class="panel">
+        <h3 style="margin:0 0 6px 0">Backend</h3>
+        <div id="health" style="font-size:12px;opacity:.8">Checking…</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // *** Point to your LOCAL backend ***
+    const BACKEND = "http://localhost:8003";
+
+    const qs = s => document.querySelector(s);
+    const logEl = qs("#log"), slidesEl = qs("#slides"), flowEl = qs("#flowWrap"),
+          linksEl = qs("#links"), busyEl = qs("#busy");
+
+    const log = (m, ok=true) => {
+      const d = document.createElement("div");
+      d.textContent = (ok ? "✅ " : "❌ ") + m;
+      d.style.color = ok ? "#bbf7d0" : "#fecaca";
+      d.style.margin = "2px 0";
+      logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+    };
+    const setBusy = on => busyEl.style.display = on ? "inline-flex" : "none";
+    const j = (p,b) => fetch(BACKEND+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})}).then(r=>r.json().then(d=>r.ok?d:Promise.reject(d)));
+
+    async function showArtifacts(a){
+      linksEl.innerHTML = "";
+      if(a?.outline_json) addLink("outline.json", a.outline_json);
+      if(a?.research_json) addLink("research.json", a.research_json);
+      if(a?.summary_md) addLink("summary.md", a.summary_md);
+      if(a?.text) addLink("slides.txt", a.text);
+
+      if(a?.text){
+        try{ const r=await fetch(BACKEND+a.text); const t=await r.text(); slidesEl.innerHTML="<pre>"+escape(t)+"</pre>"; }
+        catch{ slidesEl.textContent="Could not load slides text."; }
+      } else slidesEl.textContent="No content yet.";
+
+      if(a?.flowchart){
+        const img = document.createElement("img");
+        img.src = BACKEND + a.flowchart + "?t="+Date.now();
+        img.style.maxWidth="100%"; img.style.border="1px solid rgba(255,255,255,.1)"; img.style.borderRadius="12px";
+        flowEl.innerHTML=""; flowEl.appendChild(img);
+      } else flowEl.textContent="No diagram yet.";
+    }
+    function addLink(label, href){ const a=document.createElement("a"); a.textContent=label; a.href=BACKEND+href; a.target="_blank"; linksEl.appendChild(a); }
+    const escape = s => s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+
+    async function runAll(){
+      const topic = qs("#topic").value.trim(), fast = qs("#fast").checked;
+      slidesEl.textContent=""; flowEl.textContent=""; linksEl.innerHTML=""; logEl.innerHTML="";
+      setBusy(true); log("POST /v1/run_all …");
+      try{
+        const out = await j("/v1/run_all",{topic, chart_slide_index:3, fast});
+        await showArtifacts(out.artifacts);
+        log("pipeline complete");
+      }catch(e){ log(JSON.stringify(e), false); alert("Run failed (see Activity)."); }
+      finally{ setBusy(false); }
+    }
+
+    async function runManual(){
+      const topic = qs("#topic").value.trim(), fast = qs("#fast").checked;
+      slidesEl.textContent=""; flowEl.textContent=""; linksEl.innerHTML=""; logEl.innerHTML="";
+      setBusy(true);
+      try{
+        const r = await j("/v1/research",{topic, fast});           log("research ok");
+        await j("/v1/synthesize",{topic, research_json:r.paths.research_json, fast}); log("synthesize ok");
+        const o = await j("/v1/outline",{topic, research_json:r.paths.research_json, fast}); log("outline ok");
+        const c = await j("/v1/content",{topic, outline_json:o.paths.outline_json, research_json:r.paths.research_json, chart_slide_index:3, fast}); log("content ok");
+        await showArtifacts({ text:c.content_files?.text, flowchart:c.content_files?.flowchart, outline_json:o.paths.outline_json, research_json:r.paths.research_json, summary_md:`/out/summary_${topic.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}.md` });
+        log("pipeline complete");
+      }catch(e){ log(JSON.stringify(e), false); alert("Run failed (see Activity)."); }
+      finally{ setBusy(false); }
+    }
+
+    qs("#runAll").onclick = runAll;
+    qs("#runManual").onclick = runManual;
+
+    (async () => {
+      try{
+        const r = await fetch(BACKEND+"/health"); const h = await r.json();
+        qs("#health").textContent = JSON.stringify(h);
+      }catch{ qs("#health").textContent = "Cannot reach backend at "+BACKEND; }
+    })();
+  </script>
+</body>
+</html>

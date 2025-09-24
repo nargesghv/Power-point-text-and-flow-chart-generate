@@ -1,0 +1,27 @@
+# Core agent & orchestration
+langgraph>=0.2
+langchain>=0.2
+langchain-openai>=0.1  # optional if using OpenAI models
+
+# Web research
+tavily-python>=0.3
+trafilatura>=1.9
+beautifulsoup4>=4.12
+lxml>=5.2
+duckduckgo-search>=6.2.6
+
+# PPT generation
+python-pptx>=1.0.0
+Pillow>=10.3
+
+# CLI + utilities
+typer>=0.12
+pydantic>=2.7
+tenacity>=8.2
+tqdm>=4.66
+pyyaml>=6.0.1
+requests>=2.31
+
+# LLM backends - Groq and Ollama only
+groq>=0.4.1
+ollama>=0.1.7

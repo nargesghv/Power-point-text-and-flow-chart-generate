@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual env
+.env
+.venv/
+env/
+venv/
+.agent/
+
+# App outputs
+out/
+data/assets/
+*.pptx
+*.png
+*.jpg
+*.jpeg
+
+# Playwright
+playwright-report/
+test-results/
+.ms-playwright/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
