@@ -2,11 +2,12 @@
   publish = "src/graphdeck/web"
   command = ""   # no build step
 
-# Optional: keep the UI fresh in the browser
+# (Optional) avoid cached index in browser
 [[headers]]
   for = "/index.html"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
     Pragma        = "no-cache"
     Expires       = "0"
+
 
