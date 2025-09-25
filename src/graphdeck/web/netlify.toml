@@ -1,7 +1,8 @@
 [build]
-  publish = "."
-  command = ""
+  publish = "src/graphdeck/web"
+  command = ""   # no build step
 
+# Optional: keep the UI fresh in the browser
 [[headers]]
   for = "/index.html"
   [headers.values]
