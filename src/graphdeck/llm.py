@@ -137,33 +137,42 @@ INPUT (JSON):
 {input_json}
 """
 
-BLOG_PROMPT = """You are a professional content writer. Create a comprehensive blog post about the TOPIC that tells a complete story.
+# llm.py  (replace BLOG_PROMPT)
+BLOG_PROMPT = """You are a professional content writer. Create a complete blog post with the following sections ONLY:
+
+# {topic}
+## Introduction
+- Engage quickly and set context.
+
+## Main
+- Develop the core ideas with clear subheadings if needed.
+- Connect concepts logically with practical examples.
+
+## Conclusion
+- Summarize the key takeaways and give 3–5 actionable recommendations.
 
 Use this RESEARCH SUMMARY as grounding context (if any):
 ---
 {research_context}
 ---
 
-The blog should:
-- Start with an engaging introduction that hooks the reader
-- Develop key concepts progressively and connect ideas logically
-- End with actionable insights and conclusions
-- Be 800–1200 words total{length_hint}
-- Use a storytelling approach with clear headings (Markdown)
-
-TOPIC: {topic}
+Rules:
+- 800–1200 words total{length_hint} (fast mode can be shorter).
+- Markdown format. Use H3/H4 only inside the Main section if needed.
+- Neutral, crisp, practical tone. Avoid fluff.
 """
 
-OUTLINE_PROMPT = """Design a PowerPoint slide outline based on the BLOG content. Return STRICT JSON ONLY with keys:
-- "slide_count" (int, 6–8)
+# llm.py  (replace OUTLINE_PROMPT)
+OUTLINE_PROMPT = """Design a 6-slide outline from the BLOG content. Return STRICT JSON ONLY with keys:
+- "slide_count" (int, must be 6)
 - "sections" (array of {{"title": str, "bullets": [str]}})
 
-Requirements:
-- Slide 1 title MUST be exactly the topic and have no bullets
-- Total slides: 6 (exact)
-- Each slide title must be concise, professional
-- Slides must follow a logical storytelling flow from the blog
-- Keep bullets concise (max 5 per slide, max 14 words per bullet)
+Constraints:
+- Slide 1 title MUST be exactly the topic and have no bullets.
+- Slide 2: "Introduction" — 2–4 bullets (context, why now).
+- Slides 3–5: "Main" content broken into 3 logical parts, each with 3–5 concise bullets.
+- Slide 6: "Conclusion & Next Steps" — 3–5 bullets (summary + actions).
+- Bullets ≤ 14 words, max 5 bullets per slide (except slide 1).
 
 BLOG CONTENT:
 {blog_content}
@@ -171,7 +180,6 @@ BLOG CONTENT:
 INPUT (JSON):
 {input_json}
 """
-
 # --------------------------------------------------------------------------------------
 # Summarization API (legacy; your pipeline now uses summarize.py, but keep for reuse)
 # --------------------------------------------------------------------------------------
