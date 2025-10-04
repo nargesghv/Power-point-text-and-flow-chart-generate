@@ -1,11 +1,13 @@
 from __future__ import annotations
+
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(), override=False)
+
 import json, os
 from typing import Any, Dict, List, Optional
-
 from .llm import _chat, build_source_table
-
-FAST = os.getenv("GRAPHDECK_FAST") == "1"
-
+#FAST = os.getenv("GRAPHDECK_FAST") == "0"
+FAST = os.getenv("GRAPHDECK_FAST", "0") == "1"   # <-- define FAST properly
 SUMMARY_PROMPT_V2 = """You are a senior industry analyst. Given a TOPIC and a SOURCES table, write a concise,
 decision-ready brief in Markdown that an executive can scan in < 2 minutes.
 
@@ -78,7 +80,7 @@ def write_summary_markdown(topic: str, sources: List[Dict[str, Any]]) -> str:
         temperature=temperature,
         max_tokens=max_tokens,
         force_json=False,
-        prefer="ollama",  # favor local model to avoid API delays
+        prefer="groq",  # favor local model to avoid API delays
     )
     return out if isinstance(out, str) else ""
 
@@ -109,4 +111,6 @@ def synthesize_bundle(bundle: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(bundle)
     out["summary"] = summary_md
     return out
+
+
 
