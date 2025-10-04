@@ -9,6 +9,7 @@ __pycache__/
 
 # Virtual env
 .env
+src/graphdeck/local_secrets.py
 .venv/
 env/
 venv/
