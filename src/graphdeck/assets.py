@@ -1,10 +1,25 @@
 from __future__ import annotations
-import asyncio, json, pathlib, re, textwrap, html as _html, os
+
+import asyncio
+import json
+import os
+import pathlib
+import re
+import textwrap
+import html as _html
 from typing import Dict, Any, List, Optional
+
 from .llm import _chat
 
-FAST = os.getenv("GRAPHDECK_FAST") == "1"
+# -----------------------------------------------------------------------------
+# Flags
+# -----------------------------------------------------------------------------
+FAST = os.getenv("GRAPHDECK_FAST", "0") == "1"
+DEBUG = os.getenv("GRAPHDECK_DEBUG", "0") == "1"
 
+# -----------------------------------------------------------------------------
+# Mermaid proposal (deterministic fallback)
+# -----------------------------------------------------------------------------
 def propose_mermaid(topic: str) -> str:
     safe = (topic or "Topic").strip().replace("\n", " ")[:100]
     return textwrap.dedent(f"""
@@ -29,15 +44,22 @@ Requirements:
 Return only Mermaid code (no backticks)."""
 
 def _build_research_hint(research: Optional[Dict[str, Any]]) -> str:
-    if not research: return ""
+    if not research:
+        return ""
     parts: List[str] = []
     summary = (research.get("summary") or "").strip()
-    if summary: parts.append("SUMMARY:\n" + summary[:800])
+    if summary:
+        parts.append("SUMMARY:\n" + summary[:800])
     for s in (research.get("sources") or [])[:6]:
         title = (s.get("title") or "")[:100]
         url = (s.get("url") or "")[:160]
-        if title or url: parts.append(f"- {title} — {url}")
+        if title or url:
+            parts.append(f"- {title} — {url}")
     return "\n".join(parts)
+
+def _looks_like_mermaid(s: str) -> bool:
+    s = (s or "").strip().lower()
+    return s.startswith("flowchart") and "td" in s[:40]  # quick sanity filter
 
 def mermaid_from_llm(topic: str, research: Optional[Dict[str, Any]] = None) -> str:
     hint = _build_research_hint(research)
@@ -45,12 +67,17 @@ def mermaid_from_llm(topic: str, research: Optional[Dict[str, Any]] = None) -> s
     prompt = "Create a Mermaid flowchart for the payload below. Return ONLY Mermaid.\n\n" + json.dumps(payload, ensure_ascii=False, indent=2)
     try:
         mermaid = _chat(LLM_MERMAID_SYSTEM, prompt, temperature=0.2, max_tokens=700)
-    except Exception:
+    except Exception as e:
+        if DEBUG:
+            import traceback; print("mermaid_from_llm error:", e); traceback.print_exc()
         mermaid = ""
-    if not isinstance(mermaid, str) or "flowchart" not in mermaid:
+    if not isinstance(mermaid, str) or not _looks_like_mermaid(mermaid):
         return propose_mermaid(topic)
     return mermaid.strip()
 
+# -----------------------------------------------------------------------------
+# Helpers for deterministic build
+# -----------------------------------------------------------------------------
 def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", (s or "").strip())[:40] or "N"
 
@@ -112,28 +139,9 @@ def build_mermaid_from_title_bullets(title: str, bullets: List[str]) -> str:
             lines.append(f"  {root_id} --> {node}")
     return "\n".join(lines) + "\n"
 
-def flowchart_from_title_bullets(
-    title: str,
-    bullets: List[str],
-    out_path: str,
-    *,
-    research: Optional[Dict[str, Any]] = None,
-    use_llm: bool = True,
-    width: int = 1200,
-    height: int = 800,
-) -> str:
-    if FAST:
-        use_llm = False
-    if use_llm:
-        topic = f"{title} — " + "; ".join((bullets or [])[:6])
-        mmd = mermaid_from_llm(topic, research=research)
-        if "flowchart" not in (mmd or ""):
-            mmd = build_mermaid_from_title_bullets(title, bullets)
-    else:
-        mmd = build_mermaid_from_title_bullets(title, bullets)
-    render_mermaid(mmd, out_path, width=width, height=height)
-    return out_path
-
+# -----------------------------------------------------------------------------
+# Rendering
+# -----------------------------------------------------------------------------
 VISUAL_PROMPT = """Make a single-slide HTML (1600x900) dark theme with a left SVG flow diagram and a right sidebar.
 Tone: clean, modern, business. No external CSS.
 INPUT:
@@ -144,10 +152,18 @@ def html_visual_from_llm(payload: Dict[str, Any]) -> str:
     prompt = VISUAL_PROMPT.format(input_json=json.dumps(payload, ensure_ascii=False, indent=2))
     return _chat("You produce polished, self-contained HTML slides.", prompt, temperature=0.2, max_tokens=1800 if FAST else 2000)
 
-# ---- Playwright rendering ----
-
 async def _render_html_async(html: str, out_img: str, width: int = 1600, height: int = 900, selector: str = "body") -> None:
-    from playwright.async_api import async_playwright
+    try:
+        from playwright.async_api import async_playwright
+    except Exception as e:
+        # Playwright not installed — write an .html next to the target so there is still an artifact
+        html_path = pathlib.Path(out_img).with_suffix(".html")
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(html, encoding="utf-8")
+        if DEBUG:
+            print("Playwright unavailable; wrote HTML instead:", html_path)
+        return
+
     out_path = pathlib.Path(out_img)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as p:
@@ -161,13 +177,22 @@ async def _render_html_async(html: str, out_img: str, width: int = 1600, height:
                 svg_html = await page.evaluate("el => el.outerHTML", el)
                 out_path.write_text(svg_html, encoding="utf-8")
             else:
-                if el: await el.screenshot(path=str(out_path))
-                else:  await page.screenshot(path=str(out_path), full_page=False)
+                if el:
+                    await el.screenshot(path=str(out_path))
+                else:
+                    await page.screenshot(path=str(out_path), full_page=False)
         finally:
             await browser.close()
 
 def render_html_to_image(html: str, out_img: str, width: int = 1600, height: int = 900, selector: str = "body") -> None:
-    asyncio.run(_render_html_async(html, out_img, width, height, selector))
+    # If called inside an existing event loop (unlikely here), fallback to a new loop in a thread
+    try:
+        asyncio.get_running_loop()
+        # Running inside an event loop: create a nested task via a new loop
+        asyncio.run(_render_html_async(html, out_img, width, height, selector))
+    except RuntimeError:
+        # No loop running
+        asyncio.run(_render_html_async(html, out_img, width, height, selector))
 
 def _html_for_mermaid(mmd: str, width: int, height: int) -> str:
     return f"""<!doctype html>
@@ -196,9 +221,46 @@ def render_mermaid(mmd: str, out_img: str, width: int = 1200, height: int = 800)
     html = _html_for_mermaid(mmd, width, height)
     render_html_to_image(html, out_img, width, height, selector="#diagram svg")
 
-def generate_flowchart_image(topic: str, out_img: str, use_llm: bool = True, width: int = 1200, height: int = 800, research: Optional[Dict[str, Any]] = None) -> str:
-    if FAST: use_llm = False
+# -----------------------------------------------------------------------------
+# Public APIs
+# -----------------------------------------------------------------------------
+def flowchart_from_title_bullets(
+    title: str,
+    bullets: List[str],
+    out_path: str,
+    *,
+    research: Optional[Dict[str, Any]] = None,
+    use_llm: bool = True,
+    width: int = 1200,
+    height: int = 800,
+) -> str:
+    if FAST:
+        use_llm = False
+    if use_llm:
+        topic = f"{title} — " + "; ".join((bullets or [])[:6])
+        mmd = mermaid_from_llm(topic, research=research)
+        if not _looks_like_mermaid(mmd):
+            mmd = build_mermaid_from_title_bullets(title, bullets)
+    else:
+        mmd = build_mermaid_from_title_bullets(title, bullets)
+    render_mermaid(mmd, out_path, width=width, height=height)
+    return out_path
+
+def generate_flowchart_image(
+    topic: str,
+    out_img: str,
+    use_llm: bool = True,
+    width: int = 1200,
+    height: int = 800,
+    research: Optional[Dict[str, Any]] = None
+) -> str:
+    if FAST:
+        use_llm = False
     mermaid = mermaid_from_llm(topic, research=research) if use_llm else propose_mermaid(topic)
     render_mermaid(mermaid, out_img, width=width, height=height)
     return out_img
+
+def html_visual_from_llm(payload: Dict[str, Any]) -> str:
+    prompt = VISUAL_PROMPT.format(input_json=json.dumps(payload, ensure_ascii=False, indent=2))
+    return _chat("You produce polished, self-contained HTML slides.", prompt, temperature=0.2, max_tokens=1800 if FAST else 2000)
 
