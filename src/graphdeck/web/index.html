@@ -8,141 +8,267 @@
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
   <style>
-    body{margin:0;background:#070915;color:#e8ecff;font:16px/1.5 system-ui,Segoe UI,Inter}
-    .wrap{max-width:1200px;margin:32px auto;padding:0 20px}
-    .panel{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:16px}
+    :root{
+      --bg:#070915; --card:rgba(255,255,255,.06); --line:rgba(255,255,255,.10);
+      --text:#e8ecff; --muted:#a7b3e6; --accent1:#6366f1; --accent2:#ec4899;
+      --ok:#bbf7d0; --err:#fecaca; --link:#93c5fd;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,Segoe UI,Inter,Roboto,Arial}
+    a{color:var(--link)}
+    .wrap{max-width:1200px;margin:28px auto;padding:0 18px}
+    .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
     .row{display:grid;gap:16px}
     @media(min-width:960px){.row{grid-template-columns:2fr 1fr}}
-    .btn{padding:10px 14px;border-radius:12px;font-weight:600;border:1px solid rgba(255,255,255,.1);
-      background:linear-gradient(135deg,rgba(99,102,241,.25),rgba(236,72,153,.25));color:#e8ecff;cursor:pointer}
-    .badge{display:inline-flex;gap:8px;padding:4px 8px;border-radius:10px;background:rgba(255,255,255,.1);
-      border:1px solid rgba(255,255,255,.1);font-size:12px}
-    .input{width:100%;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#e8ecff}
+    .btn{padding:10px 14px;border-radius:12px;font-weight:700;border:1px solid var(--line);
+      background:linear-gradient(135deg,rgba(99,102,241,.25),rgba(236,72,153,.25));color:var(--text);cursor:pointer}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .badge{display:inline-flex;gap:8px;padding:4px 8px;border-radius:10px;background:rgba(255,255,255,.10);
+      border:1px solid var(--line);font-size:12px}
+    .input, .select{width:100%;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.05);
+      border:1px solid var(--line);color:var(--text)}
+    .stack{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center}
+    .links a{margin-right:10px;text-decoration:underline}
     pre{white-space:pre-wrap;margin:0}
-    .links a{color:#93c5fd;margin-right:10px;text-decoration:underline}
+    details{border:1px dashed var(--line);border-radius:12px;padding:8px}
+    summary{cursor:pointer;color:var(--muted)}
+    .pill{display:inline-flex;align-items:center;gap:8px;margin:2px 8px 8px 0;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid var(--line)}
+    .pill a{color:var(--text);text-decoration:none}
+    .pill small{opacity:.7}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <header style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
-      <h1 style="font-weight:900;font-size:34px;letter-spacing:-.02em">GraphDeck ✨</h1>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+    <header class="stack" style="justify-content:space-between;margin-bottom:14px">
+      <h1 style="font-weight:900;font-size:32px;letter-spacing:-.02em;margin:0">GraphDeck ✨</h1>
+      <div class="stack">
         <button id="runAll" class="btn">✨ Run All</button>
         <button id="runManual" class="btn">🪄 Step by Step</button>
         <label class="badge"><input id="fast" type="checkbox" checked/> ⚡ Fast</label>
+        <span id="busy" class="badge" style="display:none">Working…</span>
       </div>
     </header>
 
+    <!-- Topic + Backend configuration -->
     <div class="panel" style="margin-bottom:16px">
-      <label style="font-size:12px;opacity:.7">Topic</label>
-      <input id="topic" class="input" value="AI in marketing" placeholder="e.g., AI in marketing"/>
+      <div class="row" style="grid-template-columns:2fr 1fr">
+        <div>
+          <label style="font-size:12px;opacity:.7">Topic</label>
+          <input id="topic" class="input" value="AI in marketing" placeholder="e.g., Milan fashion sustainability"/>
+        </div>
+        <div>
+          <div class="kv">
+            <label style="font-size:12px;opacity:.7;padding-top:6px">Backend URL</label>
+            <input id="backendUrl" class="input" placeholder="https://your-backend.example.com"/>
+          </div>
+          <div class="stack" style="margin-top:8px">
+            <label class="badge"><input id="useProxy" type="checkbox"/> Use Netlify proxy (/v1 → backend)</label>
+            <button id="saveCfg" class="btn" style="padding:6px 10px">Save</button>
+          </div>
+          <small style="opacity:.65">Leave empty + enable “Use Netlify proxy” if you added a redirect in <code>netlify.toml</code>.</small>
+        </div>
+      </div>
     </div>
 
+    <!-- Output panels -->
     <div class="row">
       <div class="panel">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <div class="stack" style="margin-bottom:6px">
           <span class="badge">Slides (text)</span>
-          <span id="busy" class="badge" style="display:none">Working…</span>
+          <span id="artStatus" class="badge" style="display:none"></span>
         </div>
-        <div id="slides" style="min-height:320px;opacity:.8">No content yet. Run the pipeline.</div>
+        <div id="slides" style="min-height:320px;opacity:.9">No content yet. Run the pipeline.</div>
       </div>
 
       <div class="panel">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <div class="stack" style="margin-bottom:6px">
           <span class="badge">Slide 3 Flowchart</span>
         </div>
-        <div id="flowWrap" style="min-height:220px;opacity:.8">No diagram yet.</div>
+        <div id="flowWrap" style="min-height:220px;opacity:.9">No diagram yet.</div>
         <div id="links" class="links" style="margin-top:10px"></div>
       </div>
     </div>
 
+    <!-- Research / Summary quick peek -->
     <div class="row" style="margin-top:16px">
       <div class="panel">
-        <h3 style="margin:0 0 6px 0">Activity</h3>
-        <div id="log" style="font-size:12px;max-height:240px;overflow:auto"></div>
+        <h3 style="margin:0 0 8px 0">Artifacts</h3>
+        <div id="artifactPills" class="stack"></div>
       </div>
       <div class="panel">
         <h3 style="margin:0 0 6px 0">Backend</h3>
-        <div id="health" style="font-size:12px;opacity:.8">Checking…</div>
+        <div id="health" style="font-size:12px;opacity:.85">Checking…</div>
       </div>
+    </div>
+
+    <!-- Activity log -->
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin:0 0 6px 0">Activity</h3>
+      <div id="log" style="font-size:12px;max-height:260px;overflow:auto"></div>
     </div>
   </div>
 
   <script>
-    // *** Point to your LOCAL backend ***
-    const BACKEND = "http://localhost:8003";
-
+    // ------- Config / helpers -------
     const qs = s => document.querySelector(s);
     const logEl = qs("#log"), slidesEl = qs("#slides"), flowEl = qs("#flowWrap"),
-          linksEl = qs("#links"), busyEl = qs("#busy");
+          linksEl = qs("#links"), busyEl = qs("#busy"), artStatus = qs("#artStatus"),
+          pillsEl = qs("#artifactPills");
+    const topicEl = qs("#topic"), fastEl = qs("#fast");
+    const backendEl = qs("#backendUrl"), proxyEl = qs("#useProxy");
 
-    const log = (m, ok=true) => {
-      const d = document.createElement("div");
-      d.textContent = (ok ? "✅ " : "❌ ") + m;
-      d.style.color = ok ? "#bbf7d0" : "#fecaca";
-      d.style.margin = "2px 0";
+    function loadCfg(){
+      const saved = JSON.parse(localStorage.getItem("graphdeck_cfg") || "{}");
+      backendEl.value = saved.backend || "";
+      proxyEl.checked = !!saved.proxy;
+    }
+    function saveCfg(){
+      localStorage.setItem("graphdeck_cfg", JSON.stringify({
+        backend: backendEl.value.trim(),
+        proxy: proxyEl.checked
+      }));
+    }
+    qs("#saveCfg").onclick = saveCfg;
+    loadCfg();
+
+    function backendBase(){
+      // If proxy mode, keep empty so we call /v1 on the same origin and let Netlify redirect
+      const backend = backendEl.value.trim();
+      if (proxyEl.checked) return "";  // same-origin + redirects
+      return backend || "";            // explicit backend URL or empty (localhost use)
+    }
+    function api(path){ 
+      const base = backendBase();
+      if (!base) return path; // proxy mode or same-origin dev
+      return base.replace(/\/+$/,"") + path; 
+    }
+    function setBusy(on){ busyEl.style.display = on ? "inline-flex" : "none"; }
+    function log(m, ok=true){
+      const d=document.createElement("div");
+      d.textContent=(ok?"✅ ":"❌ ")+m;
+      d.style.color=ok?"#bbf7d0":"#fecaca";
+      d.style.margin="2px 0";
       logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
-    };
-    const setBusy = on => busyEl.style.display = on ? "inline-flex" : "none";
-    const j = (p,b) => fetch(BACKEND+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})}).then(r=>r.json().then(d=>r.ok?d:Promise.reject(d)));
+    }
+    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 
-    async function showArtifacts(a){
+    async function j(path, body){
+      const url = api(path);
+      const r = await fetch(url, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(body||{}) });
+      const data = await r.json().catch(()=> ({}));
+      if(!r.ok) throw data;
+      return data;
+    }
+
+    // ------- UI helpers -------
+    function clearOutputs(){
+      slidesEl.textContent=""; flowEl.textContent=""; linksEl.innerHTML=""; pillsEl.innerHTML="";
+      artStatus.style.display="none";
+      logEl.innerHTML="";
+    }
+
+    function addPill(label, href){
+      const pill=document.createElement("span"); pill.className="pill";
+      const a=document.createElement("a"); a.textContent=label; a.href = href; a.target="_blank"; a.download="";
+      pill.appendChild(a);
+      const dl=document.createElement("small"); dl.textContent="⭳";
+      pill.appendChild(dl);
+      pillsEl.appendChild(pill);
+    }
+
+    function linkIf(href, label){ if (href) addPill(label, (backendBase()||"") + href); }
+
+    async function showArtifactsFromMap(a, topic){
+      // a: { text, flowchart, outline_json, research_json, summary_md, blog_md, deck_pptx }
       linksEl.innerHTML = "";
-      if(a?.outline_json) addLink("outline.json", a.outline_json);
-      if(a?.research_json) addLink("research.json", a.research_json);
-      if(a?.summary_md) addLink("summary.md", a.summary_md);
-      if(a?.text) addLink("slides.txt", a.text);
+      pillsEl.innerHTML = "";
+      const tslug = topic.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 
-      if(a?.text){
-        try{ const r=await fetch(BACKEND+a.text); const t=await r.text(); slidesEl.innerHTML="<pre>"+escape(t)+"</pre>"; }
-        catch{ slidesEl.textContent="Could not load slides text."; }
-      } else slidesEl.textContent="No content yet.";
+      // link pills
+      linkIf(a.research_json, "research.json");
+      linkIf(a.summary_md, "summary.md");
+      linkIf(a.blog_md || `/out/blog_${tslug}.md`, "blog.md");
+      linkIf(a.outline_json, "outline.json");
+      linkIf(a.text, "slides.txt");
+      linkIf(a.flowchart, "diagram.png");
+      linkIf(a.deck_pptx || `/out/${tslug.replace(/-/g,'_')}.pptx`, "deck.pptx");
 
-      if(a?.flowchart){
+      // slides text preview
+      if (a.text){
+        try{
+          const r = await fetch(api(a.text));
+          const t = await r.text();
+          slidesEl.innerHTML = "<pre>"+escapeHTML(t)+"</pre>";
+        }catch{ slidesEl.textContent = "Could not load slides text."; }
+      } else slidesEl.textContent = "No slides text.";
+
+      // flowchart preview
+      if (a.flowchart){
         const img = document.createElement("img");
-        img.src = BACKEND + a.flowchart + "?t="+Date.now();
+        img.src = api(a.flowchart) + "?t="+Date.now();
         img.style.maxWidth="100%"; img.style.border="1px solid rgba(255,255,255,.1)"; img.style.borderRadius="12px";
         flowEl.innerHTML=""; flowEl.appendChild(img);
-      } else flowEl.textContent="No diagram yet.";
-    }
-    function addLink(label, href){ const a=document.createElement("a"); a.textContent=label; a.href=BACKEND+href; a.target="_blank"; linksEl.appendChild(a); }
-    const escape = s => s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+      } else flowEl.textContent = "No diagram yet.";
 
+      // status badge
+      const done = Object.values(a||{}).filter(Boolean).length;
+      artStatus.style.display="inline-flex";
+      artStatus.textContent = done ? `Artifacts: ${done}` : "No artifacts";
+    }
+
+    // ------- Pipeline actions -------
     async function runAll(){
-      const topic = qs("#topic").value.trim(), fast = qs("#fast").checked;
-      slidesEl.textContent=""; flowEl.textContent=""; linksEl.innerHTML=""; logEl.innerHTML="";
-      setBusy(true); log("POST /v1/run_all …");
+      const topic = topicEl.value.trim(), fast = fastEl.checked;
+      clearOutputs(); setBusy(true); log("POST /v1/run_all …");
       try{
         const out = await j("/v1/run_all",{topic, chart_slide_index:3, fast});
-        await showArtifacts(out.artifacts);
+        await showArtifactsFromMap(out.artifacts || {}, topic);
         log("pipeline complete");
       }catch(e){ log(JSON.stringify(e), false); alert("Run failed (see Activity)."); }
       finally{ setBusy(false); }
     }
 
     async function runManual(){
-      const topic = qs("#topic").value.trim(), fast = qs("#fast").checked;
-      slidesEl.textContent=""; flowEl.textContent=""; linksEl.innerHTML=""; logEl.innerHTML="";
-      setBusy(true);
+      const topic = topicEl.value.trim(), fast = fastEl.checked;
+      clearOutputs(); setBusy(true);
       try{
-        const r = await j("/v1/research",{topic, fast});           log("research ok");
+        const r = await j("/v1/research",{topic, fast});                           log("research ok");
         await j("/v1/synthesize",{topic, research_json:r.paths.research_json, fast}); log("synthesize ok");
         const o = await j("/v1/outline",{topic, research_json:r.paths.research_json, fast}); log("outline ok");
         const c = await j("/v1/content",{topic, outline_json:o.paths.outline_json, research_json:r.paths.research_json, chart_slide_index:3, fast}); log("content ok");
-        await showArtifacts({ text:c.content_files?.text, flowchart:c.content_files?.flowchart, outline_json:o.paths.outline_json, research_json:r.paths.research_json, summary_md:`/out/summary_${topic.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}.md` });
+
+        // Derive blog + deck paths even if backend didn’t echo them
+        const tslug = topic.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+        const artifacts = {
+          text: c?.content_files?.text,
+          flowchart: c?.content_files?.flowchart,
+          outline_json: o?.paths?.outline_json,
+          research_json: r?.paths?.research_json,
+          summary_md: `/out/summary_${tslug}.md`,
+          blog_md: `/out/blog_${tslug}.md`,
+          deck_pptx: `/out/${tslug.replace(/-/g,'_')}.pptx`
+        };
+
+        await showArtifactsFromMap(artifacts, topic);
         log("pipeline complete");
       }catch(e){ log(JSON.stringify(e), false); alert("Run failed (see Activity)."); }
       finally{ setBusy(false); }
     }
 
+    // ------- Wire up -------
     qs("#runAll").onclick = runAll;
     qs("#runManual").onclick = runManual;
 
+    // Health
     (async () => {
       try{
-        const r = await fetch(BACKEND+"/health"); const h = await r.json();
+        const r = await fetch(api("/health"));
+        const h = await r.json();
         qs("#health").textContent = JSON.stringify(h);
-      }catch{ qs("#health").textContent = "Cannot reach backend at "+BACKEND; }
+      }catch{
+        qs("#health").textContent = "Cannot reach backend at " + (backendBase() || "(proxy)");
+      }
     })();
   </script>
 </body>
