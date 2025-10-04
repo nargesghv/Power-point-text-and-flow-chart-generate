@@ -6,7 +6,6 @@ load_dotenv(find_dotenv(), override=False)  # load .env before any env access
 import json
 import os
 from typing import List, Optional
-
 import typer
 
 from .utils import slugify, ensure_dir
@@ -100,18 +99,22 @@ def blog(
         f.write(content)
     typer.echo(f"✅ Wrote blog → {path}")
 
-# ---------- Outline (driven by blog generated from SUMMARY if present) ----------
+# ---------- Outline (BLOG-ONLY) ----------
 
 @app.command()
 def outline(
     topic: str,
-    blog_md: str = typer.Option("", "--blog-md", help="Blog markdown file (optional)"),
-    research_json: str = typer.Option("", "--research-json", help="Research JSON (should include 'summary')"),
+    blog_md: str = typer.Option("", "--blog-md", help="Path to Blog markdown (.md). If omitted, will generate from research."),
+    research_json: str = typer.Option("", "--research-json", help="Research JSON (should include 'summary' for better blog generation)"),
     audience: str = typer.Option("executive & technical mixed"),
     tone: str = typer.Option("crisp and practical"),
     out_dir: str = typer.Option("out", help="Directory to write outputs"),
     fast: bool = typer.Option(False, "--fast", help="Enable fast mode"),
 ):
+    """
+    Build a 6-slide outline **from the blog markdown only**.
+    If --blog-md isn't provided, we generate the blog first (from research if present).
+    """
     if fast:
         os.environ["GRAPHDECK_FAST"] = "1"
     from .llm import make_outline, generate_blog
@@ -119,6 +122,7 @@ def outline(
     ensure_dir(out_dir)
     slug = slugify(topic)
 
+    # 1) Get the blog markdown (either provided or generated)
     if blog_md and os.path.exists(blog_md):
         blog_content = open(blog_md, "r", encoding="utf-8").read()
     else:
@@ -129,15 +133,16 @@ def outline(
             auto = os.path.join(out_dir, f"research_{slug}.json")
             if os.path.exists(auto):
                 research = json.load(open(auto, "r", encoding="utf-8"))
-        # generate_blog uses research["summary"] if present → better outline
         blog_content = generate_blog(topic, research=research)
 
-    # Save the blog to keep artifacts consistent
+    # 2) Save the blog to keep artifacts consistent
     blog_path = os.path.join(out_dir, f"blog_{slug}.md")
     with open(blog_path, "w", encoding="utf-8") as f:
         f.write(blog_content)
 
+    # 3) Make outline strictly from the blog (no summary preference)
     plan = make_outline(topic=topic, blog_content=blog_content, audience=audience, tone=tone)
+
     out_json = os.path.join(out_dir, f"outline_{slug}.json")
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=2)
@@ -236,7 +241,7 @@ def content(
                 title=title,
                 bullets=bullets,
                 out_path=slide_png,
-                research=None,  # or reuse 'research' if you prefer
+                research=None,  # or reuse 'research'
                 use_llm=(not chart_no_llm),
                 width=chart_width,
                 height=chart_height,
@@ -259,5 +264,4 @@ def content(
 
 if __name__ == "__main__":
     app()
-
 
