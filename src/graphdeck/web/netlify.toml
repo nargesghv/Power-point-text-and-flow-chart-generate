@@ -1,8 +1,18 @@
-[build]
-  publish = "src/graphdeck/web"
-  command = ""   # no build step
+##############################################
+# Netlify config for GraphDeck frontend
+##############################################
 
-# (Optional) avoid cached index in browser
+[build]
+  # Folder that contains index.html
+  publish = "src/graphdeck/web"
+  # Static site — no build step
+  command = ""
+
+##############################################
+# Caching
+##############################################
+
+# Always fetch a fresh index.html (avoid stale UI after deploys)
 [[headers]]
   for = "/index.html"
   [headers.values]
@@ -10,4 +20,62 @@
     Pragma        = "no-cache"
     Expires       = "0"
 
+# Allow other static files to be cached a bit by the browser
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=600"
 
+##############################################
+# Security headers (sane defaults for static UI)
+##############################################
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options        = "SAMEORIGIN"
+    Referrer-Policy        = "no-referrer-when-downgrade"
+    Permissions-Policy     = "geolocation=(), microphone=(), camera=()"
+
+##############################################
+# CORS (helpful when downloading artifacts or
+# when you keep absolute links in the UI)
+##############################################
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin  = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "*"
+
+##############################################
+# OPTIONAL: Proxy the backend via Netlify
+# If you enable these redirects, you can:
+# - leave BACKEND blank in index.html
+# - tick "Use Netlify proxy" in the UI
+# Calls to /v1/* and /out/* will be forwarded
+# to your FastAPI server.
+##############################################
+
+# API endpoints
+[[redirects]]
+  from = "/v1/*"
+  to   = "https://YOUR-BACKEND-DOMAIN.example/v1/:splat"
+  status = 200
+  force  = true
+
+# Generated artifacts (research.json, outline.json, summary.md, slides txt, diagrams, pptx, …)
+[[redirects]]
+  from = "/out/*"
+  to   = "https://YOUR-BACKEND-DOMAIN.example/out/:splat"
+  status = 200
+  force  = true
+
+##############################################
+# (Optional) SPA-style fallback — uncomment if
+# you later add client-side routing.
+##############################################
+# [[redirects]]
+#   from = "/*"
+#   to   = "/index.html"
+#   status = 200
