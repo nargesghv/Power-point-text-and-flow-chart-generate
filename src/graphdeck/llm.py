@@ -1,42 +1,54 @@
 from __future__ import annotations
-import os, json, re
-from typing import Any, Dict, List, Optional, Tuple
+
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(), override=False)
+
+import os
+import json
+import re
+from typing import Any, Dict, List, Optional
 
 from .config import settings
 
 # --------------------------------------------------------------------------------------
 # Backend toggles
 # --------------------------------------------------------------------------------------
-FAST = os.getenv("GRAPHDECK_FAST") == "1"          # shorter, faster prompts
-NO_LLM = os.getenv("GRAPHDECK_NO_LLM") == "1"      # force deterministic fallbacks
+# Standardize flags across the codebase:
+# - FAST: enable shorter prompts / lower token budgets when "1"
+# - NO_LLM: force deterministic fallbacks when "1"
+# - DEBUG: print backend exceptions (Groq/Ollama) when "1"
+FAST = os.getenv("GRAPHDECK_FAST", "0") == "1"
+NO_LLM = os.getenv("GRAPHDECK_NO_LLM", "0") == "1"
+DEBUG = os.getenv("GRAPHDECK_DEBUG", "0") == "1"
 
 # --------------------------------------------------------------------------------------
 # LLM backends
 # --------------------------------------------------------------------------------------
-
 def _try_groq():
     try:
         from groq import Groq
-        if settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY"):
-            api_key = os.getenv("GROQ_API_KEY", settings.GROQ_API_KEY)
+        api_key = os.getenv("GROQ_API_KEY", settings.GROQ_API_KEY)
+        if api_key:
             return Groq(api_key=api_key), "groq"
-    except Exception:
-        pass
+    except Exception as e:
+        if DEBUG:
+            import traceback; print("GROQ init error:", e); traceback.print_exc()
     return None, None
 
 def _try_ollama():
     try:
-        import ollama  # client is module-level
+        import ollama  # client is the module itself
         base = os.getenv("OLLAMA_BASE_URL") or settings.OLLAMA_BASE_URL
         if base:
             os.environ["OLLAMA_HOST"] = base
         return ollama, "ollama"
-    except Exception:
-        pass
+    except Exception as e:
+        if DEBUG:
+            import traceback; print("OLLAMA init error:", e); traceback.print_exc()
     return None, None
 
 def _extract_json(text: str) -> str:
-    """Pull the first {...} blob to help when models wrap JSON with prose."""
+    """Pull the first {...} blob when models wrap JSON with prose."""
     m1 = text.find("{")
     m2 = text.rfind("}")
     if m1 != -1 and m2 != -1 and m2 > m1:
@@ -52,7 +64,7 @@ def _chat(
     prefer: str | None = None,
 ) -> str:
     """
-    Chat with LLM. Prefer 'groq' for quality and 'ollama' as fallback unless overridden.
+    Chat with an LLM. Prefer 'groq' for quality and 'ollama' as fallback unless overridden.
     """
     # Preferred order
     order = ["groq", "ollama"]
@@ -75,7 +87,9 @@ def _chat(
             )
             out = resp.choices[0].message.content or ""
             return _extract_json(out) if force_json else out
-        except Exception:
+        except Exception as e:
+            if DEBUG:
+                import traceback; print("GROQ error:", e); traceback.print_exc()
             return None
 
     def try_ollama():
@@ -91,7 +105,9 @@ def _chat(
             )
             out = (resp or {}).get("message", {}).get("content", "") or ""
             return _extract_json(out) if force_json else out
-        except Exception:
+        except Exception as e:
+            if DEBUG:
+                import traceback; print("OLLAMA error:", e); traceback.print_exc()
             return None
 
     for backend in order:
@@ -104,7 +120,6 @@ def _chat(
 # --------------------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------------------
-
 def shorten_domain(url: str) -> str:
     try:
         from urllib.parse import urlparse
@@ -114,7 +129,7 @@ def shorten_domain(url: str) -> str:
         return url
 
 def build_source_table(sources: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    table = []
+    table: List[Dict[str, str]] = []
     for idx, s in enumerate(sources, 1):
         u = s.get("url") or ""
         table.append({
@@ -128,7 +143,6 @@ def build_source_table(sources: List[Dict[str, Any]]) -> List[Dict[str, str]]:
 # --------------------------------------------------------------------------------------
 # Prompts
 # --------------------------------------------------------------------------------------
-
 SUMMARIZE_PROMPT = """You are a careful researcher. Write a concise, multi-paragraph summary of the TOPIC using the SOURCES table.
 - Keep it tight, fact-focused, and practical for a small-business audience.
 - Cite inline like [1], [2] using the id column when you borrow a claim.
@@ -173,9 +187,8 @@ INPUT (JSON):
 """
 
 # --------------------------------------------------------------------------------------
-# Summarization API (legacy; your pipeline now uses summarize.py, but keep for reuse)
+# Summarization API (legacy; still useful in some flows)
 # --------------------------------------------------------------------------------------
-
 def summarize_with_citations(topic: str, sources: List[Dict[str, Any]]) -> str:
     table = build_source_table(sources)[:10]
     payload = {"topic": topic, "sources": table}
@@ -191,7 +204,6 @@ def summarize_with_citations(topic: str, sources: List[Dict[str, Any]]) -> str:
 # --------------------------------------------------------------------------------------
 # Blog generation (prefers Groq; robust fallback)
 # --------------------------------------------------------------------------------------
-
 def _fallback_blog_from_summary(topic: str, research: Optional[Dict[str, Any]]) -> str:
     summary = (research or {}).get("summary") or ""
     lines = [f"# {topic}", ""]
@@ -277,18 +289,18 @@ def generate_blog(
             prompt,
             temperature=0.2 if FAST else temperature,
             max_tokens=550 if FAST else max_tokens,
-            prefer=prefer or "groq",  # <<< Prefer Groq
+            prefer=prefer or "groq",
         )
         if isinstance(out, str) and len(out.strip()) > 200:
             return out
-    except Exception:
-        pass
+    except Exception as e:
+        if DEBUG:
+            import traceback; print("generate_blog error:", e); traceback.print_exc()
     return _fallback_blog_from_summary(topic, research)
 
 # --------------------------------------------------------------------------------------
 # Outline generation (prefers Groq; robust fallback)
 # --------------------------------------------------------------------------------------
-
 def _outline_from_blog_or_summary(topic: str, blog_content: str) -> Dict[str, Any]:
     """
     Build a clean 6-slide outline from headings/bullets in blog_content.
@@ -299,13 +311,12 @@ def _outline_from_blog_or_summary(topic: str, blog_content: str) -> Dict[str, An
     # Extract H2s (## ) as candidate slide titles and bullets under them
     h2 = [m.strip("# ").strip() for m in re.findall(r"(?m)^## +.+$", blog_content or "")]
     parts = re.split(r"(?m)^## +.+$", blog_content)[1:] if h2 else []
-    sections = []
+    sections: List[Dict[str, Any]] = []
     if h2 and parts:
         for title, block in zip(h2, parts):
-            # skip the Exec Summary as a separate slide; it's already reflected in storyline
             if title.lower().strip() in {"executive summary"}:
                 continue
-            bullets = []
+            bullets: List[str] = []
             for b in re.findall(r"(?m)^[\-\*]\s+(.+)$", block):
                 b = re.sub(r"\s+", " ", b).strip()
                 if b:
@@ -362,7 +373,7 @@ def make_outline(
             temperature=0.25 if FAST else temperature,
             max_tokens=450 if FAST else max_tokens,
             force_json=True,
-            prefer=prefer or "groq",  # <<< Prefer Groq
+            prefer=prefer or "groq",
         )
         data = json.loads(raw)
         sections = data.get("sections") or []
@@ -378,8 +389,8 @@ def make_outline(
             s["title"] = (s.get("title") or "").strip()[:70]
             s["bullets"] = ([] if i == 0 else [b.strip()[:120] for b in (s.get("bullets") or [])][:5])
         return {"slide_count": 6, "sections": sections}
-    except Exception:
+    except Exception as e:
+        if DEBUG:
+            import traceback; print("make_outline error:", e); traceback.print_exc()
         return _outline_from_blog_or_summary(topic, blog_content)
-
-
 
