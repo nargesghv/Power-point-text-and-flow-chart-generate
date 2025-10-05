@@ -148,19 +148,19 @@ def outline(
         json.dump(plan, f, ensure_ascii=False, indent=2)
     typer.echo(f"✅ Wrote outline → {out_json} (slides: {plan.get('slide_count', 'n/a')})")
 
-# ---------- Flowchart from a slide (STRICTLY from outline title+bullets) ----------
+# ---------- Flowchart from a slide (slide-only, bigger default size) ----------
 
 @app.command()
 def slidechart(
     outline_json: str = typer.Option(..., help="Path to outline_*.json with sections"),
     slide_index: int = typer.Option(3, help="1-based slide index to chart (default: 3)"),
     out_png: str = typer.Option("out/slide_flowchart.png"),
-    # keep flags for backward-compat, but we ignore research and quick_research now
+    # kept for compatibility, ignored now:
     research_json: str = typer.Option("", help="(ignored)"),
     quick_research: bool = typer.Option(False, help="(ignored)"),
     no_llm: bool = typer.Option(False, "--no-llm", help="Use deterministic chart builder (no LLM)"),
-    width: int = typer.Option(1200),
-    height: int = typer.Option(800),
+    width: int = typer.Option(1600),
+    height: int = typer.Option(900),
     fast: bool = typer.Option(False, "--fast", help="Enable fast mode"),
 ):
     """
@@ -188,7 +188,7 @@ def slidechart(
         bullets=bullets,
         out_path=out_png,
         research=None,                 # strictly from slide content
-        use_llm=(not no_llm),          # optional LLM formatting; still bound to given bullets
+        use_llm=(not no_llm),          # LLM allowed only to format given bullets
         width=width,
         height=height,
     )
@@ -206,8 +206,8 @@ def content(
     out_dir: str = typer.Option("out", help="Directory to write outputs"),
     chart_from_slide: bool = typer.Option(True, help="Also generate a flowchart from a slide's title+bullets"),
     chart_slide_index: int = typer.Option(3, help="Which slide (1-based) to chart"),
-    chart_width: int = typer.Option(1200),
-    chart_height: int = typer.Option(800),
+    chart_width: int = typer.Option(1600),
+    chart_height: int = typer.Option(900),
     chart_no_llm: bool = typer.Option(False, "--chart-no-llm"),
     fast: bool = typer.Option(False, "--fast", help="Enable fast mode"),
 ):
@@ -215,7 +215,6 @@ def content(
         os.environ["GRAPHDECK_FAST"] = "1"
     from .ppt import generate_powerpoint_content
     from .assets import flowchart_from_title_bullets
-    # from .research import research_topic  # no longer needed here
 
     ensure_dir(out_dir)
     slug = slugify(topic)
@@ -238,7 +237,7 @@ def content(
                 bullets=bullets,
                 out_path=slide_png,
                 research=None,              # strictly from slide content
-                use_llm=(not chart_no_llm), # optional LLM formatting
+                use_llm=(not chart_no_llm),
                 width=chart_width,
                 height=chart_height,
             )
