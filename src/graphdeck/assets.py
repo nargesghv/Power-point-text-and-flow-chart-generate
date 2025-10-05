@@ -312,3 +312,4 @@ def flowchart_from_title_bullets(
 
     render_mermaid(mmd, out_path, width=width, height=height)
     return out_path
+
