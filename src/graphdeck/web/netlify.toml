@@ -38,7 +38,7 @@
     Permissions-Policy     = "geolocation=(), microphone=(), camera=()"
 
 ##############################################
-# CORS (useful for downloading artifacts)
+# CORS for generated artifacts (/out/*)
 ##############################################
 [[headers]]
   for = "/out/*"
@@ -49,38 +49,36 @@
     Cache-Control = "no-store"
 
 ##############################################
-# ---- PRODUCTION PROXY (Netlify CDN → HTTPS backend)
-# Replace YOUR-BACKEND-DOMAIN with your real public backend.
-# Note: Netlify prod cannot reach http://localhost.
+# -------- PRODUCTION (Netlify CDN → Public backend)
+# Replace the domain below with your PUBLIC HTTPS backend.
+# If your backend is only on localhost, use a tunnel (Cloudflare/Ngrok)
+# and put that https URL here.
 ##############################################
 
-# API endpoints
+# API
 [[redirects]]
   from = "/v1/*"
-  to   = "https://YOUR-BACKEND-DOMAIN/v1/:splat"
+  to   = "https://YOUR-PUBLIC-BACKEND/v1/:splat"
   status = 200
   force  = true
 
-# Generated artifacts (research.json, outline.json, summary.md, slides text, diagrams, pptx…)
+# Artifacts served by backend
 [[redirects]]
   from = "/out/*"
-  to   = "https://YOUR-BACKEND-DOMAIN/out/:splat"
+  to   = "https://YOUR-PUBLIC-BACKEND/out/:splat"
   status = 200
   force  = true
 
-# Health endpoint for the UI status panel
+# Health endpoint (UI status box)
 [[redirects]]
   from = "/health"
-  to   = "https://YOUR-BACKEND-DOMAIN/health"
+  to   = "https://YOUR-PUBLIC-BACKEND/health"
   status = 200
   force  = true
 
-
 ##############################################
-# ---- LOCAL DEV PROXY (netlify dev)
-# When you run:  netlify dev
-# Netlify will proxy UI calls to your local backend at http://localhost:8003
-# (These rules are only used by the Netlify CLI; safe to keep in the file.)
+# -------- LOCAL DEV (netlify dev → localhost:8003)
+# These rules are only used by the Netlify CLI in development.
 ##############################################
 
 [[redirects]]
@@ -105,7 +103,7 @@
   conditions = { Environment = ["development"] }
 
 ##############################################
-# (Optional) SPA fallback if you later add routing
+# (Optional) SPA fallback if you add client routing later
 ##############################################
 # [[redirects]]
 #   from = "/*"
