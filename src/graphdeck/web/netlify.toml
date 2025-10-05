@@ -20,7 +20,7 @@
     Pragma        = "no-cache"
     Expires       = "0"
 
-# Allow other static files to be cached a bit by the browser
+# Allow other static files to be cached briefly
 [[headers]]
   for = "/*"
   [headers.values]
@@ -38,44 +38,77 @@
     Permissions-Policy     = "geolocation=(), microphone=(), camera=()"
 
 ##############################################
-# CORS (helpful when downloading artifacts or
-# when you keep absolute links in the UI)
+# CORS (useful for downloading artifacts)
 ##############################################
 [[headers]]
-  for = "/*"
+  for = "/out/*"
   [headers.values]
     Access-Control-Allow-Origin  = "*"
     Access-Control-Allow-Methods = "GET, POST, OPTIONS"
     Access-Control-Allow-Headers = "*"
+    Cache-Control = "no-store"
 
 ##############################################
-# OPTIONAL: Proxy the backend via Netlify
-# If you enable these redirects, you can:
-# - leave BACKEND blank in index.html
-# - tick "Use Netlify proxy" in the UI
-# Calls to /v1/* and /out/* will be forwarded
-# to your FastAPI server.
+# ---- PRODUCTION PROXY (Netlify CDN → HTTPS backend)
+# Replace YOUR-BACKEND-DOMAIN with your real public backend.
+# Note: Netlify prod cannot reach http://localhost.
 ##############################################
 
 # API endpoints
 [[redirects]]
   from = "/v1/*"
-  to   = "https://YOUR-BACKEND-DOMAIN.example/v1/:splat"
+  to   = "https://YOUR-BACKEND-DOMAIN/v1/:splat"
   status = 200
   force  = true
 
-# Generated artifacts (research.json, outline.json, summary.md, slides txt, diagrams, pptx, …)
+# Generated artifacts (research.json, outline.json, summary.md, slides text, diagrams, pptx…)
 [[redirects]]
   from = "/out/*"
-  to   = "https://YOUR-BACKEND-DOMAIN.example/out/:splat"
+  to   = "https://YOUR-BACKEND-DOMAIN/out/:splat"
   status = 200
   force  = true
 
+# Health endpoint for the UI status panel
+[[redirects]]
+  from = "/health"
+  to   = "https://YOUR-BACKEND-DOMAIN/health"
+  status = 200
+  force  = true
+
+
 ##############################################
-# (Optional) SPA-style fallback — uncomment if
-# you later add client-side routing.
+# ---- LOCAL DEV PROXY (netlify dev)
+# When you run:  netlify dev
+# Netlify will proxy UI calls to your local backend at http://localhost:8003
+# (These rules are only used by the Netlify CLI; safe to keep in the file.)
+##############################################
+
+[[redirects]]
+  from = "/v1/*"
+  to   = "http://localhost:8003/v1/:splat"
+  status = 200
+  force  = true
+  conditions = { Environment = ["development"] }
+
+[[redirects]]
+  from = "/out/*"
+  to   = "http://localhost:8003/out/:splat"
+  status = 200
+  force  = true
+  conditions = { Environment = ["development"] }
+
+[[redirects]]
+  from = "/health"
+  to   = "http://localhost:8003/health"
+  status = 200
+  force  = true
+  conditions = { Environment = ["development"] }
+
+##############################################
+# (Optional) SPA fallback if you later add routing
 ##############################################
 # [[redirects]]
 #   from = "/*"
 #   to   = "/index.html"
 #   status = 200
+
