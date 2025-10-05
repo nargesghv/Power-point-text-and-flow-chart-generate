@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>GraphDeck ✨</title>
+  <title>GraphDeck ✨ v2</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
@@ -19,30 +19,30 @@
     .wrap{max-width:1200px;margin:28px auto;padding:0 18px}
     .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
     .row{display:grid;gap:16px}
-    @media(min-width:1100px){.row{grid-template-columns:2fr 1fr}}
+    @media(min-width:960px){.row{grid-template-columns:2fr 1fr}}
     .btn{padding:10px 14px;border-radius:12px;font-weight:700;border:1px solid var(--line);
       background:linear-gradient(135deg,rgba(99,102,241,.25),rgba(236,72,153,.25));color:var(--text);cursor:pointer}
     .btn:disabled{opacity:.5;cursor:not-allowed}
     .badge{display:inline-flex;gap:8px;padding:4px 8px;border-radius:10px;background:rgba(255,255,255,.10);
       border:1px solid var(--line);font-size:12px}
-    .input{width:100%;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.05);
+    .input, .select{width:100%;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.05);
       border:1px solid var(--line);color:var(--text)}
     .stack{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center}
-    .links a{text-decoration:underline}
+    .links a{margin-right:10px;text-decoration:underline}
     pre{white-space:pre-wrap;margin:0}
     details{border:1px dashed var(--line);border-radius:12px;padding:8px}
     summary{cursor:pointer;color:var(--muted)}
     .pill{display:inline-flex;align-items:center;gap:8px;margin:2px 8px 8px 0;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid var(--line)}
     .pill a{color:var(--text);text-decoration:none}
     .pill small{opacity:.7}
-    .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+    img.flow{max-width:100%; height:auto; border:1px solid rgba(255,255,255,.1); border-radius:12px;}
   </style>
 </head>
 <body>
   <div class="wrap">
     <header class="stack" style="justify-content:space-between;margin-bottom:14px">
-      <h1 style="font-weight:900;font-size:32px;letter-spacing:-.02em;margin:0">GraphDeck ✨</h1>
+      <h1 style="font-weight:900;font-size:32px;letter-spacing:-.02em;margin:0">GraphDeck ✨ v2</h1>
       <div class="stack">
         <button id="runAll" class="btn">✨ Run All</button>
         <button id="runManual" class="btn">🪄 Step by Step</button>
@@ -61,13 +61,13 @@
         <div>
           <div class="kv">
             <label style="font-size:12px;opacity:.7;padding-top:6px">Backend URL</label>
-            <input id="backendUrl" class="input" value="http://localhost:8003" placeholder="https://your-backend.example.com"/>
+            <input id="backendUrl" class="input" placeholder="http://localhost:8003"/>
           </div>
           <div class="stack" style="margin-top:8px">
             <label class="badge"><input id="useProxy" type="checkbox"/> Use Netlify proxy (/v1 → backend)</label>
             <button id="saveCfg" class="btn" style="padding:6px 10px">Save</button>
           </div>
-          <small style="opacity:.65">For Netlify production, enable “Use Netlify proxy” and configure redirects in <code>netlify.toml</code>. Local dev can call <code>http://localhost:8003</code> directly.</small>
+          <small style="opacity:.65">For local dev, set Backend URL to <code>http://localhost:8003</code> and leave proxy unchecked.</small>
         </div>
       </div>
     </div>
@@ -79,19 +79,19 @@
           <span class="badge">Slides (text)</span>
           <span id="artStatus" class="badge" style="display:none"></span>
         </div>
-        <div id="slides" style="min-height:320px;opacity:.95">No content yet. Run the pipeline.</div>
+        <div id="slides" style="min-height:340px;opacity:.9">No content yet. Run the pipeline.</div>
       </div>
 
       <div class="panel">
         <div class="stack" style="margin-bottom:6px">
           <span class="badge">Slide 3 Flowchart</span>
         </div>
-        <div id="flowWrap" style="min-height:220px;opacity:.95">No diagram yet.</div>
-        <div id="links" class="links" style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap"></div>
+        <div id="flowWrap" style="min-height:420px;opacity:.9">No diagram yet.</div>
+        <div id="links" class="links" style="margin-top:10px"></div>
       </div>
     </div>
 
-    <!-- Research / Summary / Blog quick peek -->
+    <!-- Artifacts + Health -->
     <div class="row" style="margin-top:16px">
       <div class="panel">
         <h3 style="margin:0 0 8px 0">Artifacts</h3>
@@ -99,26 +99,14 @@
       </div>
       <div class="panel">
         <h3 style="margin:0 0 6px 0">Backend</h3>
-        <div id="health" class="mono" style="font-size:12px;opacity:.85">Checking…</div>
+        <div id="health" style="font-size:12px;opacity:.85">Checking…</div>
       </div>
     </div>
 
     <!-- Activity log -->
     <div class="panel" style="margin-top:16px">
       <h3 style="margin:0 0 6px 0">Activity</h3>
-      <div id="log" class="mono" style="font-size:12px;max-height:260px;overflow:auto"></div>
-    </div>
-
-    <!-- PREVIEWS -->
-    <div class="row" style="margin-top:16px">
-      <div class="panel">
-        <h3 style="margin:0 0 6px 0">Summary (preview)</h3>
-        <div id="summary" style="min-height:120px;opacity:.95">—</div>
-      </div>
-      <div class="panel">
-        <h3 style="margin:0 0 6px 0">Blog (preview)</h3>
-        <div id="blog" style="min-height:120px;opacity:.95">—</div>
-      </div>
+      <div id="log" style="font-size:12px;max-height:260px;overflow:auto"></div>
     </div>
   </div>
 
@@ -127,29 +115,27 @@
     const qs = s => document.querySelector(s);
     const logEl = qs("#log"), slidesEl = qs("#slides"), flowEl = qs("#flowWrap"),
           linksEl = qs("#links"), busyEl = qs("#busy"), artStatus = qs("#artStatus"),
-          pillsEl = qs("#artifactPills"), summaryEl = qs("#summary"), blogEl = qs("#blog");
+          pillsEl = qs("#artifactPills");
     const topicEl = qs("#topic"), fastEl = qs("#fast");
     const backendEl = qs("#backendUrl"), proxyEl = qs("#useProxy");
 
     function loadCfg(){
       const saved = JSON.parse(localStorage.getItem("graphdeck_cfg") || "{}");
-      if (saved.backend) backendEl.value = saved.backend;
-      if (typeof saved.proxy === "boolean") proxyEl.checked = saved.proxy;
+      backendEl.value = saved.backend || "http://localhost:8003";
+      proxyEl.checked = !!saved.proxy;
     }
     function saveCfg(){
       localStorage.setItem("graphdeck_cfg", JSON.stringify({
         backend: backendEl.value.trim(),
         proxy: proxyEl.checked
       }));
-      alert("Saved.");
     }
     qs("#saveCfg").onclick = saveCfg;
     loadCfg();
 
     function backendBase(){
-      // If proxy mode, keep empty so we call /v1 on the same origin and let Netlify redirect.
       const backend = backendEl.value.trim();
-      if (proxyEl.checked) return "";
+      if (proxyEl.checked) return "";  // same-origin + redirects on Netlify
       return backend || "";
     }
     function api(path){
@@ -166,21 +152,6 @@
       logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
     }
     function escapeHTML(s){ return (s||"").replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
-    function mdToHtml(md){
-      // Tiny markdown to HTML (bold, italics, headers, bullets)
-      let h = escapeHTML(md || "");
-      h = h.replace(/^###### (.*)$/gm, "<h6>$1</h6>")
-           .replace(/^##### (.*)$/gm, "<h5>$1</h5>")
-           .replace(/^#### (.*)$/gm, "<h4>$1</h4>")
-           .replace(/^### (.*)$/gm, "<h3>$1</h3>")
-           .replace(/^## (.*)$/gm, "<h2>$1</h2>")
-           .replace(/^# (.*)$/gm, "<h1>$1</h1>")
-           .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
-           .replace(/\*(.+?)\*/g, "<i>$1</i>")
-           .replace(/^- (.+)$/gm, "<li>$1</li>");
-      h = h.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
-      return h.replace(/\n{2,}/g,"<br/><br/>");
-    }
 
     async function j(path, body){
       const url = api(path);
@@ -193,7 +164,6 @@
     // ------- UI helpers -------
     function clearOutputs(){
       slidesEl.textContent=""; flowEl.textContent=""; linksEl.innerHTML=""; pillsEl.innerHTML="";
-      summaryEl.textContent="—"; blogEl.textContent="—";
       artStatus.style.display="none";
       logEl.innerHTML="";
     }
@@ -206,77 +176,45 @@
       pill.appendChild(dl);
       pillsEl.appendChild(pill);
     }
-    function linkIf(href, label){
-      if (!href) return;
-      const full = (backendBase()||"") + href;
-      addPill(label, full);
-      // Also show a compact link list under the diagram
-      const a=document.createElement("a"); a.textContent=label; a.href=full; a.target="_blank"; a.download="";
-      linksEl.appendChild(a);
-    }
 
-    async function showTextPreview(path, el){
-      if (!path) return;
-      try{
-        const r = await fetch(api(path));
-        const t = await r.text();
-        el.innerHTML = "<pre>"+escapeHTML(t)+"</pre>";
-      }catch{ el.textContent = "Could not load."; }
-    }
-    async function showMarkdownPreview(path, el){
-      if (!path) return;
-      try{
-        const r = await fetch(api(path));
-        const t = await r.text();
-        el.innerHTML = mdToHtml(t);
-      }catch{ el.textContent = "Could not load."; }
-    }
+    function linkIf(href, label){ if (href) addPill(label, (backendBase()||"") + href); }
 
     async function showArtifactsFromMap(a, topic){
       // a: { text, flowchart, outline_json, research_json, summary_md, blog_md, deck_pptx }
       linksEl.innerHTML = "";
       pillsEl.innerHTML = "";
+      const tslug = topic.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 
-      // pills + mini links
+      // link pills
       linkIf(a.research_json, "research.json");
       linkIf(a.summary_md, "summary.md");
-      linkIf(a.blog_md, "blog.md");
+      linkIf(a.blog_md || `/out/blog_${tslug}.md`, "blog.md");
       linkIf(a.outline_json, "outline.json");
       linkIf(a.text, "slides.txt");
       linkIf(a.flowchart, "diagram.png");
-      linkIf(a.deck_pptx, "deck.pptx");
+      linkIf(a.deck_pptx || `/out/${tslug.replace(/-/g,'_')}.pptx`, "deck.pptx");
 
-      // previews
-      await showTextPreview(a.text, slidesEl);
-      await showMarkdownPreview(a.summary_md, summaryEl);
-      await showMarkdownPreview(a.blog_md, blogEl);
+      // slides text preview
+      if (a.text){
+        try{
+          const r = await fetch(api(a.text));
+          const t = await r.text();
+          slidesEl.innerHTML = "<pre>"+escapeHTML(t)+"</pre>";
+        }catch{ slidesEl.textContent = "Could not load slides text."; }
+      } else slidesEl.textContent = "No slides text.";
 
       // flowchart preview
       if (a.flowchart){
         const img = document.createElement("img");
+        img.className = "flow";
         img.src = api(a.flowchart) + "?t="+Date.now();
-        img.style.maxWidth="100%";
-        img.style.border="1px solid rgba(255,255,255,.1)";
-        img.style.borderRadius="12px";
         flowEl.innerHTML=""; flowEl.appendChild(img);
-      } else {
-        flowEl.textContent = "No diagram yet.";
-      }
+      } else flowEl.textContent = "No diagram yet.";
 
       // status badge
       const done = Object.values(a||{}).filter(Boolean).length;
       artStatus.style.display="inline-flex";
       artStatus.textContent = done ? `Artifacts: ${done}` : "No artifacts";
-    }
-
-    function deriveDefaultPaths(topic){
-      const tslug = topic.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-      const deck = `/out/${tslug.replace(/-/g,'_')}.pptx`;
-      return {
-        summary_md: `/out/summary_${tslug}.md`,
-        blog_md: `/out/blog_${tslug}.md`,
-        deck_pptx: deck
-      };
     }
 
     // ------- Pipeline actions -------
@@ -285,11 +223,7 @@
       clearOutputs(); setBusy(true); log("POST /v1/run_all …");
       try{
         const out = await j("/v1/run_all",{topic, chart_slide_index:3, fast});
-        const art = out.artifacts || {};
-        const defaults = deriveDefaultPaths(topic);
-        await showArtifactsFromMap({
-          ...defaults, ...art
-        }, topic);
+        await showArtifactsFromMap(out.artifacts || {}, topic);
         log("pipeline complete");
       }catch(e){ log(JSON.stringify(e), false); alert("Run failed (see Activity)."); }
       finally{ setBusy(false); }
@@ -299,28 +233,21 @@
       const topic = topicEl.value.trim(), fast = fastEl.checked;
       clearOutputs(); setBusy(true);
       try{
-        const r = await j("/v1/research",{topic, fast}); log("research ok");
-
-        // we know the path to research.json from server payload
+        const r = await j("/v1/research",{topic, fast});                           log("research ok");
         await j("/v1/synthesize",{topic, research_json:r.paths.research_json, fast}); log("synthesize ok");
-
         const o = await j("/v1/outline",{topic, research_json:r.paths.research_json, fast}); log("outline ok");
+        const c = await j("/v1/content",{topic, outline_json:o.paths.outline_json, research_json:r.paths.research_json, chart_slide_index:3, fast}); log("content ok");
 
-        const c = await j("/v1/content",{
-          topic,
-          outline_json:o.paths.outline_json,
-          research_json:r.paths.research_json,
-          chart_slide_index:3,
-          fast
-        }); log("content ok");
-
-        const defaults = deriveDefaultPaths(topic);
+        // Derive blog + deck paths even if backend didn’t echo them
+        const tslug = topic.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
         const artifacts = {
-          text: c?.content_files?.text,
-          flowchart: c?.content_files?.flowchart,
-          outline_json: o?.paths?.outline_json,
-          research_json: r?.paths?.research_json,
-          ...defaults
+          text: c?.artifacts?.text,
+          flowchart: c?.artifacts?.flowchart,
+          outline_json: o?.artifacts?.outline_json || o?.paths?.outline_json,
+          research_json: r?.artifacts?.research_json || r?.paths?.research_json,
+          summary_md: `/out/summary_${tslug}.md`,
+          blog_md: `/out/blog_${tslug}.md`,
+          deck_pptx: `/out/${tslug.replace(/-/g,'_')}.pptx`
         };
 
         await showArtifactsFromMap(artifacts, topic);
@@ -332,11 +259,13 @@
     // ------- Wire up -------
     qs("#runAll").onclick = runAll;
     qs("#runManual").onclick = runManual;
+
+    // Health
     (async () => {
       try{
         const r = await fetch(api("/health"));
         const h = await r.json();
-        qs("#health").textContent = JSON.stringify(h, null, 2);
+        qs("#health").textContent = JSON.stringify(h);
       }catch{
         qs("#health").textContent = "Cannot reach backend at " + (backendBase() || "(proxy)");
       }
@@ -344,3 +273,4 @@
   </script>
 </body>
 </html>
+
