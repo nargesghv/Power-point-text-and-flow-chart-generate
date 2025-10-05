@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(), override=False)
+
 import asyncio
 import json
 import os
@@ -11,15 +14,15 @@ from typing import Dict, Any, List, Optional
 
 from .llm import _chat
 
-# ----------------------------------------------------------------------------- #
-# Flags                                                                          #
-# ----------------------------------------------------------------------------- #
-FAST  = os.getenv("GRAPHDECK_FAST", "0") == "1"
+# -----------------------------------------------------------------------------
+# Flags
+# -----------------------------------------------------------------------------
+FAST = os.getenv("GRAPHDECK_FAST", "0") == "1"
 DEBUG = os.getenv("GRAPHDECK_DEBUG", "0") == "1"
 
-# ----------------------------------------------------------------------------- #
-# Mermaid templates & helpers                                                    #
-# ----------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# Mermaid proposal (deterministic fallback)
+# -----------------------------------------------------------------------------
 def propose_mermaid(topic: str) -> str:
     safe = (topic or "Topic").strip().replace("\n", " ")[:100]
     return textwrap.dedent(f"""
@@ -36,10 +39,48 @@ def propose_mermaid(topic: str) -> str:
       E --> H[Impact / Outcomes]:::block
     """).strip() + "\n"
 
+LLM_MERMAID_SYSTEM = """You write high-quality Mermaid (flowchart) for business/tech slides.
+Requirements:
+- Direction: TD (top->down); succinct labels (<=6 words).
+- Use a dark theme via classDef.
+- Avoid overlapping edges; group logically.
+Return only Mermaid code (no backticks)."""
+
+def _build_research_hint(research: Optional[Dict[str, Any]]) -> str:
+    if not research:
+        return ""
+    parts: List[str] = []
+    summary = (research.get("summary") or "").strip()
+    if summary:
+        parts.append("SUMMARY:\n" + summary[:800])
+    for s in (research.get("sources") or [])[:6]:
+        title = (s.get("title") or "")[:100]
+        url = (s.get("url") or "")[:160]
+        if title or url:
+            parts.append(f"- {title} — {url}")
+    return "\n".join(parts)
+
 def _looks_like_mermaid(s: str) -> bool:
     s = (s or "").strip().lower()
     return s.startswith("flowchart") and "td" in s[:40]
 
+def mermaid_from_llm(topic: str, research: Optional[Dict[str, Any]] = None) -> str:
+    hint = _build_research_hint(research)
+    payload = {"topic": topic, "hint": hint}
+    prompt = "Create a Mermaid flowchart for the payload below. Return ONLY Mermaid.\n\n" + json.dumps(payload, ensure_ascii=False, indent=2)
+    try:
+        mermaid = _chat(LLM_MERMAID_SYSTEM, prompt, temperature=0.2, max_tokens=700)
+    except Exception as e:
+        if DEBUG:
+            import traceback; print("mermaid_from_llm error:", e); traceback.print_exc()
+        mermaid = ""
+    if not isinstance(mermaid, str) or not _looks_like_mermaid(mermaid):
+        return propose_mermaid(topic)
+    return mermaid.strip()
+
+# -----------------------------------------------------------------------------
+# Helpers for deterministic build
+# -----------------------------------------------------------------------------
 def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", (s or "").strip())[:40] or "N"
 
@@ -101,132 +142,29 @@ def build_mermaid_from_title_bullets(title: str, bullets: List[str]) -> str:
             lines.append(f"  {root_id} --> {node}")
     return "\n".join(lines) + "\n"
 
-# ----------------------------------------------------------------------------- #
-# FEW-SHOT Mermaid generation from title+bullets (LLM)                           #
-# ----------------------------------------------------------------------------- #
-
-FEW_SHOT_MERMAID_SYSTEM = """You convert slide titles and bullets into clean Mermaid flowcharts.
-
-Constraints:
-- Flow direction: TD (top→down).
-- Label brevity: <= 6 words per node.
-- Class styling: use classDef from the example (title, block, warn).
-- Parse patterns:
-  * 'A -> B -> C' = linear pipeline nodes.
-  * 'Heading: a, b, c' = one parent with three children.
-  * A question or line starting with 'Decision' creates a diamond (warn).
-- Avoid duplicate or overlapping edges; group related bullets.
-
-Return ONLY Mermaid code (no backticks, no commentary)."""
-
-FEW_SHOT_MERMAID_PROMPT = """You are given a slide TITLE and BULLETS. Produce a single Mermaid flowchart (TD) that represents the structure implied by the bullets.
-
-EXAMPLE 1
+# -----------------------------------------------------------------------------
+# Rendering
+# -----------------------------------------------------------------------------
+VISUAL_PROMPT = """Make a single-slide HTML (1600x900) dark theme with a left SVG flow diagram and a right sidebar.
+Tone: clean, modern, business. No external CSS.
 INPUT:
-{
-  "title": "Checkout Optimization",
-  "bullets": [
-    "Identify friction -> Reduce steps -> A/B test",
-    "Decision: Offer guest checkout?",
-    "KPIs: conversion, drop-off rate"
-  ]
-}
-OUTPUT:
-flowchart TD
-  classDef title fill:#202a45,stroke:#6b86ff,stroke-width:1px,color:#e8ecff,rx:8,ry:8
-  classDef block fill:#121a2b,stroke:#6b86ff,stroke-width:1px,color:#e8ecff,rx:8,ry:8
-  classDef warn  fill:#2b2312,stroke:#fbbf24,color:#ffeab6,rx:8,ry:8
-  T_Checkout_Optimization["Checkout Optimization"]:::title
-  B1_Identify_friction_S0["Identify friction"]:::block
-  T_Checkout_Optimization --> B1_Identify_friction_S0
-  B1_Identify_friction_S1["Reduce steps"]:::block
-  B1_Identify_friction_S0 --> B1_Identify_friction_S1
-  B1_Identify_friction_S2["A/B test"]:::block
-  B1_Identify_friction_S1 --> B1_Identify_friction_S2
-  B2_Decision_Offer_guest_checkout_Q["Decision: Offer guest checkout?"]:::warn
-  T_Checkout_Optimization --> B2_Decision_Offer_guest_checkout_Q
-  B3_KPIs_S0["KPIs"]:::block
-  T_Checkout_Optimization --> B3_KPIs_S0
-  B3_KPIs_S1["conversion"]:::block
-  B3_KPIs_S0 --> B3_KPIs_S1
-  B3_KPIs_S2["drop-off rate"]:::block
-  B3_KPIs_S1 --> B3_KPIs_S2
-
-EXAMPLE 2
-INPUT:
-{
-  "title": "Sustainable Retail",
-  "bullets": [
-    "Materials: organic cotton, recycled PET, hemp",
-    "Decision: Local sourcing?",
-    "Logistics -> Packaging -> Returns"
-  ]
-}
-OUTPUT:
-flowchart TD
-  classDef title fill:#202a45,stroke:#6b86ff,stroke-width:1px,color:#e8ecff,rx:8,ry:8
-  classDef block fill:#121a2b,stroke:#6b86ff,stroke-width:1px,color:#e8ecff,rx:8,ry:8
-  classDef warn  fill:#2b2312,stroke:#fbbf24,color:#ffeab6,rx:8,ry:8
-  T_Sustainable_Retail["Sustainable Retail"]:::title
-  B1_Materials_H["Materials"]:::block
-  T_Sustainable_Retail --> B1_Materials_H
-  B1_Materials_I1["organic cotton"]:::block
-  B1_Materials_H --> B1_Materials_I1
-  B1_Materials_I2["recycled PET"]:::block
-  B1_Materials_I1 --> B1_Materials_I2
-  B1_Materials_I3["hemp"]:::block
-  B1_Materials_I2 --> B1_Materials_I3
-  B2_Decision_Local_sourcing_Q["Decision: Local sourcing?"]:::warn
-  T_Sustainable_Retail --> B2_Decision_Local_sourcing_Q
-  B3_Logistics_S0["Logistics"]:::block
-  T_Sustainable_Retail --> B3_Logistics_S0
-  B3_Logistics_S1["Packaging"]:::block
-  B3_Logistics_S0 --> B3_Logistics_S1
-  B3_Logistics_S2["Returns"]:::block
-  B3_Logistics_S1 --> B3_Logistics_S2
-
-NOW DO THE SAME FOR THIS INPUT:
-{
-  "title": %(title_json)s,
-  "bullets": %(bullets_json)s
-}
+{input_json}
 """
 
-def mermaid_from_title_bullets_llm(title: str, bullets: List[str]) -> str:
-    """
-    Few-shot LLM conversion from slide title+bullets to Mermaid.
-    Falls back to deterministic builder if output isn't valid Mermaid.
-    """
-    try:
-        prompt = FEW_SHOT_MERMAID_PROMPT % {
-            "title_json": json.dumps((title or "").strip()),
-            "bullets_json": json.dumps([str(b).strip() for b in (bullets or [])]),
-        }
-        out = _chat(
-            FEW_SHOT_MERMAID_SYSTEM,
-            prompt,
-            temperature=0.2 if FAST else 0.3,
-            max_tokens=700 if FAST else 900,
-            prefer="groq",   # prefer Groq when available
-        )
-        if isinstance(out, str) and _looks_like_mermaid(out):
-            return out.strip()
-    except Exception as e:
-        if DEBUG:
-            import traceback; print("mermaid_from_title_bullets_llm error:", e); traceback.print_exc()
-    # deterministic fallback
-    return build_mermaid_from_title_bullets(title, bullets)
+def html_visual_from_llm(payload: Dict[str, Any]) -> str:
+    prompt = VISUAL_PROMPT.format(input_json=json.dumps(payload, ensure_ascii=False, indent=2))
+    return _chat("You produce polished, self-contained HTML slides.", prompt, temperature=0.2, max_tokens=1800 if FAST else 2000)
 
-# ----------------------------------------------------------------------------- #
-# Rendering                                                                      #
-# ----------------------------------------------------------------------------- #
 async def _render_html_async(html: str, out_img: str, width: int = 1600, height: int = 900, selector: str = "body") -> None:
     try:
         from playwright.async_api import async_playwright
-    except Exception:
+    except Exception as e:
+        # Playwright not installed — write an .html next to the target so there is still an artifact
         html_path = pathlib.Path(out_img).with_suffix(".html")
         html_path.parent.mkdir(parents=True, exist_ok=True)
         html_path.write_text(html, encoding="utf-8")
+        if DEBUG:
+            print("Playwright unavailable; wrote HTML instead:", html_path)
         return
 
     out_path = pathlib.Path(out_img)
@@ -242,12 +180,15 @@ async def _render_html_async(html: str, out_img: str, width: int = 1600, height:
                 svg_html = await page.evaluate("el => el.outerHTML", el)
                 out_path.write_text(svg_html, encoding="utf-8")
             else:
-                if el: await el.screenshot(path=str(out_path))
-                else:  await page.screenshot(path=str(out_path), full_page=False)
+                if el:
+                    await el.screenshot(path=str(out_path))
+                else:
+                    await page.screenshot(path=str(out_path), full_page=False)
         finally:
             await browser.close()
 
 def render_html_to_image(html: str, out_img: str, width: int = 1600, height: int = 900, selector: str = "body") -> None:
+    # If called inside an existing event loop (unlikely here), fallback to a new loop in a thread
     try:
         asyncio.get_running_loop()
         asyncio.run(_render_html_async(html, out_img, width, height, selector))
@@ -277,39 +218,45 @@ html,body{{margin:0;background:#0b1020}}
   </script>
 </body></html>"""
 
-def render_mermaid(mmd: str, out_img: str, width: int = 1200, height: int = 800) -> None:
+def render_mermaid(mmd: str, out_img: str, width: int = 1600, height: int = 900) -> None:
     html = _html_for_mermaid(mmd, width, height)
     render_html_to_image(html, out_img, width, height, selector="#diagram svg")
 
-# ----------------------------------------------------------------------------- #
-# Public API used by CLI/content (slide-index stays 3 by default upstream)       #
-# ----------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# Public APIs
+# -----------------------------------------------------------------------------
 def flowchart_from_title_bullets(
     title: str,
     bullets: List[str],
     out_path: str,
     *,
-    research: Optional[Dict[str, Any]] = None,  # ignored for LLM prompt; kept for compatibility
+    research: Optional[Dict[str, Any]] = None,
     use_llm: bool = True,
-    width: int = 1200,
-    height: int = 800,
+    width: int = 1600,
+    height: int = 900,
 ) -> str:
-    """
-    Build a flowchart for a single slide (e.g., slide 3). If LLM is enabled,
-    use the few-shot prompt; otherwise deterministic builder.
-    """
     if FAST:
         use_llm = False
-
     if use_llm:
-        mmd = mermaid_from_title_bullets_llm(title, bullets)
+        topic = f"{title} — " + "; ".join((bullets or [])[:6])
+        mmd = mermaid_from_llm(topic, research=research)
+        if not _looks_like_mermaid(mmd):
+            mmd = build_mermaid_from_title_bullets(title, bullets)
     else:
         mmd = build_mermaid_from_title_bullets(title, bullets)
-
-    if not _looks_like_mermaid(mmd):
-        # last-resort guard
-        mmd = build_mermaid_from_title_bullets(title, bullets)
-
     render_mermaid(mmd, out_path, width=width, height=height)
     return out_path
 
+def generate_flowchart_image(
+    topic: str,
+    out_img: str,
+    use_llm: bool = True,
+    width: int = 1600,
+    height: int = 900,
+    research: Optional[Dict[str, Any]] = None
+) -> str:
+    if FAST:
+        use_llm = False
+    mermaid = mermaid_from_llm(topic, research=research) if use_llm else propose_mermaid(topic)
+    render_mermaid(mermaid, out_img, width=width, height=height)
+    return out_img
