@@ -148,24 +148,29 @@ def outline(
         json.dump(plan, f, ensure_ascii=False, indent=2)
     typer.echo(f"✅ Wrote outline → {out_json} (slides: {plan.get('slide_count', 'n/a')})")
 
-# ---------- Flowchart from a slide ----------
+# ---------- Flowchart from a slide (STRICTLY from outline title+bullets) ----------
 
 @app.command()
 def slidechart(
     outline_json: str = typer.Option(..., help="Path to outline_*.json with sections"),
-    slide_index: int = typer.Option(3, help="1-based slide index to chart"),
+    slide_index: int = typer.Option(3, help="1-based slide index to chart (default: 3)"),
     out_png: str = typer.Option("out/slide_flowchart.png"),
-    research_json: str = typer.Option("", help="Optional research bundle"),
-    quick_research: bool = typer.Option(True, help="If no research_json, run quick research on the slide"),
-    no_llm: bool = typer.Option(False, "--no-llm"),
+    # keep flags for backward-compat, but we ignore research and quick_research now
+    research_json: str = typer.Option("", help="(ignored)"),
+    quick_research: bool = typer.Option(False, help="(ignored)"),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Use deterministic chart builder (no LLM)"),
     width: int = typer.Option(1200),
     height: int = typer.Option(800),
     fast: bool = typer.Option(False, "--fast", help="Enable fast mode"),
 ):
+    """
+    Render ONE slide's flowchart using ONLY that slide's title and bullets from the outline.
+    No research. No summary. Exact alignment with slides text.
+    """
     if fast:
         os.environ["GRAPHDECK_FAST"] = "1"
+
     from .assets import flowchart_from_title_bullets
-    from .research import research_topic
 
     assert os.path.exists(outline_json), f"Missing file: {outline_json}"
     outline = json.load(open(outline_json, "r", encoding="utf-8"))
@@ -175,25 +180,15 @@ def slidechart(
 
     slide = sections[idx]
     title = slide.get("title") or f"Slide {slide_index}"
-    bullets = slide.get("bullets") or []
-
-    research = None
-    if research_json and os.path.exists(research_json):
-        try:
-            research = json.load(open(research_json, "r", encoding="utf-8"))
-        except Exception:
-            research = None
-    elif quick_research:
-        q = f"{title} — " + "; ".join((bullets or [])[:6])
-        research = research_topic(q, max_sources=8, max_images=0)
+    bullets = [b for b in (slide.get("bullets") or []) if str(b).strip()]
 
     ensure_dir(os.path.dirname(out_png) or ".")
     flowchart_from_title_bullets(
         title=title,
         bullets=bullets,
         out_path=out_png,
-        research=research,
-        use_llm=(not no_llm),
+        research=None,                 # strictly from slide content
+        use_llm=(not no_llm),          # optional LLM formatting; still bound to given bullets
         width=width,
         height=height,
     )
@@ -220,7 +215,7 @@ def content(
         os.environ["GRAPHDECK_FAST"] = "1"
     from .ppt import generate_powerpoint_content
     from .assets import flowchart_from_title_bullets
-    from .research import research_topic
+    # from .research import research_topic  # no longer needed here
 
     ensure_dir(out_dir)
     slug = slugify(topic)
@@ -230,19 +225,20 @@ def content(
 
     mm_paths = list(mermaid_pngs or [])
 
+    # Make a flowchart from a single slide (defaults to slide 3) — strictly from the slide text
     if chart_from_slide and outline and isinstance(outline.get("sections"), list):
         idx = max(1, chart_slide_index) - 1
         if 0 <= idx < len(outline["sections"]):
             sec = outline["sections"][idx]
             title = sec.get("title") or f"Slide {chart_slide_index}"
-            bullets = sec.get("bullets") or []
+            bullets = [b for b in (sec.get("bullets") or []) if str(b).strip()]
             slide_png = os.path.join(out_dir, f"diagram_{slug}_slide{chart_slide_index}.png")
             flowchart_from_title_bullets(
                 title=title,
                 bullets=bullets,
                 out_path=slide_png,
-                research=None,  # or reuse 'research'
-                use_llm=(not chart_no_llm),
+                research=None,              # strictly from slide content
+                use_llm=(not chart_no_llm), # optional LLM formatting
                 width=chart_width,
                 height=chart_height,
             )
@@ -264,4 +260,5 @@ def content(
 
 if __name__ == "__main__":
     app()
+
 
