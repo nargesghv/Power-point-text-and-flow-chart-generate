@@ -31,8 +31,6 @@
     .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center}
     .links a{margin-right:10px;text-decoration:underline}
     pre{white-space:pre-wrap;margin:0}
-    details{border:1px dashed var(--line);border-radius:12px;padding:8px}
-    summary{cursor:pointer;color:var(--muted)}
     .pill{display:inline-flex;align-items:center;gap:8px;margin:2px 8px 8px 0;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid var(--line)}
     .pill a{color:var(--text);text-decoration:none}
     .pill small{opacity:.7}
@@ -67,7 +65,10 @@
             <label class="badge"><input id="useProxy" type="checkbox"/> Use Netlify proxy (/v1 → backend)</label>
             <button id="saveCfg" class="btn" style="padding:6px 10px">Save</button>
           </div>
-          <small style="opacity:.65">For local dev, set Backend URL to <code>http://localhost:8003</code> and leave proxy unchecked.</small>
+          <small style="opacity:.65">
+            Local dev: set Backend URL to <code>http://localhost:8003</code> and leave proxy unchecked.<br/>
+            Netlify: leave Backend empty and tick “Use Netlify proxy”.
+          </small>
         </div>
       </div>
     </div>
@@ -119,10 +120,21 @@
     const topicEl = qs("#topic"), fastEl = qs("#fast");
     const backendEl = qs("#backendUrl"), proxyEl = qs("#useProxy");
 
+    // Decide sane defaults based on host (local vs Netlify/public)
+    function inferDefaults() {
+      const host = (location.hostname || "").toLowerCase();
+      const isLocal = host === "localhost" || host === "127.0.0.1";
+      return {
+        backend: isLocal ? "http://localhost:8003" : "",
+        proxy: !isLocal // on Netlify (or any non-local host) default to proxy mode
+      };
+    }
+
     function loadCfg(){
       const saved = JSON.parse(localStorage.getItem("graphdeck_cfg") || "{}");
-      backendEl.value = saved.backend || "http://localhost:8003";
-      proxyEl.checked = !!saved.proxy;
+      const inferred = inferDefaults();
+      backendEl.value = (saved.backend ?? inferred.backend);
+      proxyEl.checked = (typeof saved.proxy === "boolean") ? saved.proxy : inferred.proxy;
     }
     function saveCfg(){
       localStorage.setItem("graphdeck_cfg", JSON.stringify({
@@ -135,7 +147,7 @@
 
     function backendBase(){
       const backend = backendEl.value.trim();
-      if (proxyEl.checked) return "";  // same-origin + redirects on Netlify
+      if (proxyEl.checked) return "";  // same-origin + redirects
       return backend || "";
     }
     function api(path){
@@ -273,4 +285,3 @@
   </script>
 </body>
 </html>
-
